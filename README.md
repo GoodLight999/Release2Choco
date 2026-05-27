@@ -1,83 +1,156 @@
 <div align="center">
-  <h1>GH-Release-to-MyGet</h1>
-  <p><b>Your Personal Automated Windows Package Manager</b></p>
+  <h1>Release2Choco</h1>
+  <p><b>Build a personal Chocolatey feed from GitHub Releases.</b></p>
   <a href="#japanese-日本語">日本語の説明はこちら</a>
 </div>
 
-## Overview (English)
-This repository provides a fully automated pipeline that fetches the latest versions of Windows applications from any GitHub Releases and deploys them as **Chocolatey packages (.nupkg)** to a custom MyGet feed. 
-By integrating this feed with **UniGetUI**, you can seamlessly install and update any obscure GitHub app with a single click.
+## Overview
+
+Release2Choco watches the GitHub repositories you list, selects likely Windows release assets, builds Chocolatey packages, and publishes them to your MyGet feed.
+You can then use that feed from Chocolatey-compatible clients such as UniGetUI.
+
+This is useful when an app is distributed only through GitHub Releases, or when it is not available in the public Chocolatey or winget repositories.
+
+### How it works
+
+1. Add a MyGet API key and MyGet push source URL to this repository.
+2. Add GitHub repository URLs to the `TARGET_URLS` GitHub Actions variable.
+3. GitHub Actions checks those repositories on a schedule.
+4. The workflow picks likely Windows assets, generates Chocolatey packages, and pushes the resulting `.nupkg` files to MyGet.
+5. Your MyGet feed can be registered in Chocolatey or UniGetUI as a package source.
 
 ### Features
-* **AI-like 10-Tier Scoring Algorithm:** Automatically evaluates and picks the best asset (`.msixbundle`, `.appx`, `x64-setup.exe` over `arm64`, `i386`, or CLI tools).
-* **Native 7z/ZIP Portable App Support:** If the app is distributed as a portable `.zip` or `.7z`, the pipeline natively extracts it, finds the core GUI executable, ignores CLI shims, and creates a clean Start Menu shortcut.
-* **Smart Installer Detection:** Detects if an extracted portable archive is secretly just a wrapper for `setup.exe` and dynamically executes a silent installation instead of a portable drop.
-* **Blazing Fast native API Hashing:** Bypasses downloading heavy multi-GB assets locally by extracting the native `digest` field provided directly by the GitHub Releases API.
-* **"Set It & Forget It":** You only need to add your MyGet feed URL and target GitHub URLs to GitHub Actions variables. The system runs every 3 hours and uses a transparent keepalive action to bypass GitHub's 60-day cron deactivation policy.
 
-### Setup Guide
-1. **Create a MyGet Feed**
-   - Create a free account on MyGet and a new feed.
-   - Go to `Feed Settings` > `Access Tokens (API Keys)` and generate a new Full Access API Key.
-2. **Configure GitHub Secrets & Variables**
-   - Fork or clone this repository to your GitHub account.
-   - Go to `Settings` > `Secrets and variables` > `Actions`.
-   - Add a repository **Secret** named `MYGET_API_KEY` and paste your API key.
-   - Add a repository **Variable** named `MYGET_PUSH_SOURCE_URL` and paste your MyGet push source URL:
-   ```text
-   https://www.myget.org/F/YOUR-FEED-NAME/api/v2/package
-   ```
-   - Add a repository **Variable** named `TARGET_URLS` and paste the URLs of the GitHub repositories you want to track (one per line).
-3. **Connect to UniGetUI (Client PC)**
-   - Run the following in an elevated PowerShell to register your feed:
-   ```powershell
-   choco source add -n="MyGetCustomFeed" -s="https://www.myget.org/F/YOUR-FEED-NAME/api/v2"
-   ```
+* **GitHub Releases input:** Tracks the repositories listed in `TARGET_URLS`.
+* **Heuristic asset selection:** Scores release assets and prefers likely Windows GUI installers or packages such as `.msixbundle`, `.appx`, `.msi`, `.exe`, `.zip`, and `.7z`.
+* **Portable archive support:** Extracts `.zip` and `.7z` archives, looks for a likely main GUI executable, and creates a Start Menu shortcut.
+* **Installer fallback:** If an extracted archive appears to contain an installer such as `setup.exe`, the generated package can run it instead of treating the archive as a portable app.
+* **GitHub API hash support:** Uses release asset metadata when available to avoid unnecessary large downloads during package generation.
+* **Configurable MyGet destination:** The MyGet push URL is stored in the `MYGET_PUSH_SOURCE_URL` repository variable instead of being hard-coded in the workflow.
+* **Scheduled automation:** Runs every 3 hours by default and includes a keepalive commit to reduce the chance of scheduled GitHub Actions being disabled after long inactivity.
 
----
+### Scope and limitations
 
-<hr>
+Release2Choco does not replace Chocolatey, MyGet, winget, or UniGetUI. It generates Chocolatey packages from GitHub Releases and publishes them to a MyGet feed.
 
-<h2 id="japanese-日本語">Overview (日本語)</h2>
+Asset selection is heuristic. It works best for projects that publish conventional Windows release assets with clear filenames. Some projects may need script changes or manual review.
 
-このリポジトリは、GitHub Releasesで公開されているさまざまな形式（`exe`, `msi`, `zip`, `7z`, `msix` 等）のWindowsアプリケーションの最新版を自動監視・取得し、**完全自動で「Chocolateyパッケージ（.nupkg）」としてMyGetへプッシュ**するための最強の自動化基盤です。
-これを **UniGetUI** のカスタムソースに登録することで、どんなマイナーなGitHubアプリでもワンクリックで管理・アップデートできるようになります。
+### Setup
 
-### 主な機能と特級防御策
-* **10段階の「ポイント制」AIスコアリング:** 無数のアセットの中から「あなたが一番求めているファイル」を1位に選び出します（ARM版への極大ペナルティ、MSIX形式への特大ボーナスなど）。
-* **APIネイティブハッシュのハック:** Chocolateyが要求するSHA256ハッシュ確認のために数GBのファイルを毎回ダウンロードする無駄を防ぐため、GitHub APIの `digest` 値を直接抜き取ります。
-* **強力な .7z / .zip ポータブル版対応:** 開発者が圧縮ファイルでポータブル版を配っていても、完全に解凍して中から「メインのGUIアプリ」を探し当て、不要なCLIツールを無視してWindowsのスタートメニューにショートカットを生成します。
-* **「ZIPに偽装したインストーラー」のランタイム処刑:** 解凍した中身が単なる `setup.exe` だった場合、実行時にスクリプトが自己判断してポータブル配置から「サイレントバックグラウンドインストール」へ動的に切り替えます。
-* **完全な不老不死（Keepalive）:** GitHub Actionsが3時間に1回巡回します。また、60日間コミットがないとActionsが止まる仕様に対して、自動でダミーコミットを打って回避します。
-* **MyGetの宛先をVariableで管理:** MyGetのプッシュ先URLをワークフローに直書きせず、GitHub Actions Variablesから変更できます。
+#### 1. Create a MyGet feed
 
-### 使い方（初期設定）
+1. Create a MyGet account and a feed.
+2. Open `Feed Settings` > `Access Tokens (API Keys)`.
+3. Generate a Full Access API key.
 
-**1. MyGetのAPIキー取得と登録**
-1. 作成したMyGetフィードの画面に行きます。
-2. `Feed Settings` > `Access Tokens (API Keys)` から新しいAPIキーを生成し、コピーします。
-3. GitHub上のこのリポジトリのページに行き、`Settings` > `Secrets and variables` > `Actions` を開きます。
-4. `New repository secret` をクリックし、名前に `MYGET_API_KEY`、値にコピーしたAPIキーを貼り付けて保存します。
+#### 2. Configure GitHub Secrets and Variables
 
-**2. 対象ソフトウェアのURLリストの登録（Variables）**
-1. 同じく `Settings` > `Secrets and variables` > `Actions` を開きます。
-2. **Variables** タブを選択し、`New repository variable` をクリックします。
-3. 名前に `MYGET_PUSH_SOURCE_URL` と入力し、値（Value）にMyGetのプッシュ先URLを入力します。
-   ```text
-   https://www.myget.org/F/YOUR-FEED-NAME/api/v2/package
-   ```
-4. もう一度 `New repository variable` をクリックし、名前に `TARGET_URLS` と入力します。
-5. 値（Value）に更新したいソフトウェアのGitHub URLを改行区切りで入力します。
-   ```text
-   https://github.com/jlcodes99/cockpit-tools
-   https://github.com/koala73/worldmonitor
-   ```
+Open this repository on GitHub, then go to `Settings` > `Secrets and variables` > `Actions`.
 
-**3. クライアントPC (UniGetUI) 側の設定**
-管理者権限のPowerShellで以下を実行し、MyGetフィードをローカルのソースに追加します。
+Create this repository secret:
+
+```text
+MYGET_API_KEY
+```
+
+Create this repository variable for the MyGet push source:
+
+```text
+MYGET_PUSH_SOURCE_URL=https://www.myget.org/F/YOUR-FEED-NAME/api/v2/package
+```
+
+Create this repository variable with one GitHub repository URL per line:
+
+```text
+TARGET_URLS=https://github.com/jlcodes99/cockpit-tools
+https://github.com/koala73/worldmonitor
+```
+
+#### 3. Register the feed on a client PC
+
+Run this in an elevated PowerShell, replacing `YOUR-FEED-NAME` with your MyGet feed name:
+
 ```powershell
 choco source add -n="MyGetCustomFeed" -s="https://www.myget.org/F/YOUR-FEED-NAME/api/v2"
 ```
-これでUniGetUIから自動的に読み込まれるようになります！
 
-> Note: GitHub ActionsでパッケージをpushするURLは末尾が `/api/v2/package`、Chocolatey/UniGetUIに登録するURLは末尾が `/api/v2` です。
+The GitHub Actions push URL ends with `/api/v2/package`.
+The Chocolatey or UniGetUI source URL ends with `/api/v2`.
+
+---
+
+<h2 id="japanese-日本語">Overview (日本語)</h2>
+
+Release2Choco は、指定した GitHub リポジトリの Releases を監視し、Windows 向けと思われる配布ファイルを選び、Chocolatey パッケージを生成して MyGet feed に公開します。
+作成された feed は、UniGetUI などの Chocolatey 互換クライアントから利用できます。
+
+GitHub Releases だけで配布されている Windows アプリや、Chocolatey / winget の公式リポジトリにないアプリを、自分用の更新ソースとして扱いたい場合に使います。
+
+### 仕組み
+
+1. MyGet の API key と push 先 URL を、このリポジトリに設定します。
+2. GitHub Actions の `TARGET_URLS` variable に対象リポジトリの URL を並べます。
+3. GitHub Actions が定期的に対象リポジトリの Releases を確認します。
+4. Windows 向けと思われる asset を選び、Chocolatey パッケージを生成し、`.nupkg` を MyGet に push します。
+5. 作成された MyGet feed を Chocolatey や UniGetUI の source として登録できます。
+
+### 主な機能
+
+* **GitHub Releases を入力にする:** `TARGET_URLS` に並べたリポジトリを監視します。
+* **ヒューリスティックな asset 選択:** `.msixbundle`, `.appx`, `.msi`, `.exe`, `.zip`, `.7z` など、Windows GUI アプリらしい配布ファイルをスコアリングして選びます。
+* **ポータブル archive 対応:** `.zip` / `.7z` を展開し、メインの GUI 実行ファイルと思われるものを探して、スタートメニュー shortcut を作ります。
+* **installer fallback:** 展開後の中身が `setup.exe` などの installer に見える場合は、ポータブル配置ではなく installer 実行に切り替えられます。
+* **GitHub API hash 利用:** 利用できる場合は GitHub Releases API の asset metadata を使い、パッケージ生成時の大きなファイル download を避けます。
+* **MyGet 宛先を variable で管理:** MyGet push URL は workflow に直書きせず、`MYGET_PUSH_SOURCE_URL` repository variable で変更できます。
+* **定期実行:** デフォルトでは3時間ごとに実行します。長期間 commit がない repository で scheduled GitHub Actions が止まりにくいよう、keepalive commit も含めています。
+
+### 範囲と制限
+
+Release2Choco は Chocolatey、MyGet、winget、UniGetUI の代替ではありません。
+GitHub Releases から Chocolatey パッケージを作り、MyGet feed に公開するための自動化テンプレートです。
+
+asset 選択はヒューリスティックです。
+分かりやすい名前の Windows 向け release asset を公開しているプロジェクトでは動きやすいですが、プロジェクトによってはスクリプト修正や手動確認が必要です。
+
+### 使い方
+
+#### 1. MyGet feed を作る
+
+1. MyGet アカウントと feed を作成します。
+2. `Feed Settings` > `Access Tokens (API Keys)` を開きます。
+3. Full Access API key を生成します。
+
+#### 2. GitHub Secrets and Variables を設定する
+
+GitHub 上のこのリポジトリで、`Settings` > `Secrets and variables` > `Actions` を開きます。
+
+repository secret を作成します:
+
+```text
+MYGET_API_KEY
+```
+
+MyGet の push 先 URL を repository variable に設定します:
+
+```text
+MYGET_PUSH_SOURCE_URL=https://www.myget.org/F/YOUR-FEED-NAME/api/v2/package
+```
+
+対象リポジトリの URL を、1行に1つずつ repository variable に設定します:
+
+```text
+TARGET_URLS=https://github.com/jlcodes99/cockpit-tools
+https://github.com/koala73/worldmonitor
+```
+
+#### 3. クライアント PC に feed を登録する
+
+管理者権限の PowerShell で以下を実行します。
+`YOUR-FEED-NAME` は自分の MyGet feed 名に置き換えてください。
+
+```powershell
+choco source add -n="MyGetCustomFeed" -s="https://www.myget.org/F/YOUR-FEED-NAME/api/v2"
+```
+
+GitHub Actions で package を push する URL は `/api/v2/package` で終わります。
+Chocolatey / UniGetUI に source として登録する URL は `/api/v2` で終わります。
