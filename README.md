@@ -13,7 +13,7 @@ By integrating this feed with **UniGetUI**, you can seamlessly install and updat
 * **Native 7z/ZIP Portable App Support:** If the app is distributed as a portable `.zip` or `.7z`, the pipeline natively extracts it, finds the core GUI executable, ignores CLI shims, and creates a clean Start Menu shortcut.
 * **Smart Installer Detection:** Detects if an extracted portable archive is secretly just a wrapper for `setup.exe` and dynamically executes a silent installation instead of a portable drop.
 * **Blazing Fast native API Hashing:** Bypasses downloading heavy multi-GB assets locally by extracting the native `digest` field provided directly by the GitHub Releases API.
-* **"Set It & Forget It":** You only need to add the target GitHub URL to the GitHub Actions variables. The system runs every 3 hours and uses a transparent keepalive action to bypass GitHub's 60-day cron deactivation policy.
+* **"Set It & Forget It":** You only need to add your MyGet feed URL and target GitHub URLs to GitHub Actions variables. The system runs every 3 hours and uses a transparent keepalive action to bypass GitHub's 60-day cron deactivation policy.
 
 ### Setup Guide
 1. **Create a MyGet Feed**
@@ -23,6 +23,10 @@ By integrating this feed with **UniGetUI**, you can seamlessly install and updat
    - Fork or clone this repository to your GitHub account.
    - Go to `Settings` > `Secrets and variables` > `Actions`.
    - Add a repository **Secret** named `MYGET_API_KEY` and paste your API key.
+   - Add a repository **Variable** named `MYGET_PUSH_SOURCE_URL` and paste your MyGet push source URL:
+   ```text
+   https://www.myget.org/F/YOUR-FEED-NAME/api/v2/package
+   ```
    - Add a repository **Variable** named `TARGET_URLS` and paste the URLs of the GitHub repositories you want to track (one per line).
 3. **Connect to UniGetUI (Client PC)**
    - Run the following in an elevated PowerShell to register your feed:
@@ -45,6 +49,7 @@ By integrating this feed with **UniGetUI**, you can seamlessly install and updat
 * **強力な .7z / .zip ポータブル版対応:** 開発者が圧縮ファイルでポータブル版を配っていても、完全に解凍して中から「メインのGUIアプリ」を探し当て、不要なCLIツールを無視してWindowsのスタートメニューにショートカットを生成します。
 * **「ZIPに偽装したインストーラー」のランタイム処刑:** 解凍した中身が単なる `setup.exe` だった場合、実行時にスクリプトが自己判断してポータブル配置から「サイレントバックグラウンドインストール」へ動的に切り替えます。
 * **完全な不老不死（Keepalive）:** GitHub Actionsが3時間に1回巡回します。また、60日間コミットがないとActionsが止まる仕様に対して、自動でダミーコミットを打って回避します。
+* **MyGetの宛先をVariableで管理:** MyGetのプッシュ先URLをワークフローに直書きせず、GitHub Actions Variablesから変更できます。
 
 ### 使い方（初期設定）
 
@@ -57,7 +62,12 @@ By integrating this feed with **UniGetUI**, you can seamlessly install and updat
 **2. 対象ソフトウェアのURLリストの登録（Variables）**
 1. 同じく `Settings` > `Secrets and variables` > `Actions` を開きます。
 2. **Variables** タブを選択し、`New repository variable` をクリックします。
-3. 名前に `TARGET_URLS` と入力し、値（Value）に更新したいソフトウェアのGitHub URLを改行区切りで入力します。
+3. 名前に `MYGET_PUSH_SOURCE_URL` と入力し、値（Value）にMyGetのプッシュ先URLを入力します。
+   ```text
+   https://www.myget.org/F/YOUR-FEED-NAME/api/v2/package
+   ```
+4. もう一度 `New repository variable` をクリックし、名前に `TARGET_URLS` と入力します。
+5. 値（Value）に更新したいソフトウェアのGitHub URLを改行区切りで入力します。
    ```text
    https://github.com/jlcodes99/cockpit-tools
    https://github.com/koala73/worldmonitor
@@ -66,6 +76,8 @@ By integrating this feed with **UniGetUI**, you can seamlessly install and updat
 **3. クライアントPC (UniGetUI) 側の設定**
 管理者権限のPowerShellで以下を実行し、MyGetフィードをローカルのソースに追加します。
 ```powershell
-choco source add -n="MyGetCustomFeed" -s="https://www.myget.org/F/goodlight-desktop-repo/api/v2"
+choco source add -n="MyGetCustomFeed" -s="https://www.myget.org/F/YOUR-FEED-NAME/api/v2"
 ```
 これでUniGetUIから自動的に読み込まれるようになります！
+
+> Note: GitHub ActionsでパッケージをpushするURLは末尾が `/api/v2/package`、Chocolatey/UniGetUIに登録するURLは末尾が `/api/v2` です。

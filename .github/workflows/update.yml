@@ -17,12 +17,23 @@ jobs:
         shell: powershell
 
       - name: Push to MyGet
+        env:
+          MYGET_API_KEY: ${{ secrets.MYGET_API_KEY }}
+          MYGET_PUSH_SOURCE_URL: ${{ vars.MYGET_PUSH_SOURCE_URL }}
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:MYGET_API_KEY)) {
+            throw "Repository secret MYGET_API_KEY is not set."
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:MYGET_PUSH_SOURCE_URL)) {
+            throw "Repository variable MYGET_PUSH_SOURCE_URL is not set. Example: https://www.myget.org/F/YOUR-FEED-NAME/api/v2/package"
+          }
+
           # The packages were created directly inside the auto-generated folders under ./packages
           if (Test-Path ".\packages") {
             Get-ChildItem -Path ".\packages" -Recurse -Filter "*.nupkg" | ForEach-Object {
               Write-Host "Pushing $($_.Name)..."
-              choco push $_.FullName --source "https://www.myget.org/F/goodlight-desktop-repo/api/v2/package" --api-key ${{ secrets.MYGET_API_KEY }} --force
+              choco push $_.FullName --source $env:MYGET_PUSH_SOURCE_URL --api-key $env:MYGET_API_KEY --force
             }
           } else {
             Write-Host "No packages directory found. Nothing to push."
